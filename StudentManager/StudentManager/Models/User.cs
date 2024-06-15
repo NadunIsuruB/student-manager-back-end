@@ -3,9 +3,8 @@ using System.Runtime.CompilerServices;
 
 namespace StudentManager;
 
-public class User
+public class User : BaseEntity
 {
-    public string Id { get; set; }
     public string Name { get; set; }
     public string Email { get; set; }
     public string Password { get; set; }

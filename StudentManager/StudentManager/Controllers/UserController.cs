@@ -116,13 +116,11 @@ namespace StudentManager.Controllers
         public async Task<ActionResult<CreateUserResponseDto>> PostUser(CreateUserDto user)
         {
             // Hash password
-            var userEntity = new User
-            {
-                Id = Guid.NewGuid().ToString(),
-                Name = user.Name,
-                Email = user.Email,
-                Password = Util.HashPassword(user.Password)
-            };
+            var userEntity = new User();
+            userEntity.Name = user.Name;
+            userEntity.Email = user.Email;
+            userEntity.Password = Util.HashPassword(user.Password);
+            
             _context.Users.Add(userEntity);
             try
             {

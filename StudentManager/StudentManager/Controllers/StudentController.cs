@@ -1,14 +1,19 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Threading.Tasks;
+using Humanizer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StudentManager;
+using StudentManager.Models.Dtos;
 
 namespace StudentManager.Controllers
 {
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class StudentController : ControllerBase
@@ -21,10 +26,41 @@ namespace StudentManager.Controllers
         }
 
         // GET: api/Student
+        [AllowAnonymous]
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Student>>> GetStudents()
+        public async Task<ActionResult<IEnumerable<Student>>> GetStudents(
+            int page = 1, int pageSize = 10,
+            string search = "", string sort = "asc", string sortBy = "FirstName"
+            ) 
         {
-            return await _context.Students.ToListAsync();
+            // add pagination, sorting and searching to get
+            IQueryable<Student> students = _context.Students;
+
+            if (!string.IsNullOrEmpty(search))
+            {
+                students = students.Where(s => 
+                        s.FirstName.Contains(search) || 
+                        s.LastName.Contains(search) ||
+                        s.Email.Contains(search) ||
+                        s.Address.Contains(search) ||
+                        s.Mobile.Contains(search) ||
+                        s.DateOfBirth.ToString().Contains(search) ||
+                        s.NIC.Contains(search));
+            }
+
+            if (!string.IsNullOrEmpty(sortBy))
+            {
+                students = sort.ToLower() == "asc" ? 
+                    students.OrderBy(Util.GetSortingPropertySelectorLambda(sortBy)) : 
+                    students.OrderByDescending(Util.GetSortingPropertySelectorLambda(sortBy));
+            }
+                
+            var filteredStudents = await students
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+            
+            return Ok(filteredStudents);
         }
 
         // GET: api/Student/5
@@ -75,16 +111,34 @@ namespace StudentManager.Controllers
         // POST: api/Student
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
-        public async Task<ActionResult<Student>> PostStudent(Student student)
+        public async Task<ActionResult<Student>> PostStudent(StudentDto student)
         {
-            _context.Students.Add(student);
+            Student studentEntity = new Student();
+            studentEntity.Id = Guid.NewGuid().ToString();
+            studentEntity.FirstName = student.FirstName;
+            studentEntity.LastName = student.LastName;
+            studentEntity.Mobile = student.Mobile;
+            studentEntity.Email = student.Email;
+            studentEntity.NIC = student.NIC;
+            studentEntity.DateOfBirth = student.DateOfBirth;
+            studentEntity.Address = student.Address;
+            
+            _context.Students.Add(studentEntity);
             try
             {
                 await _context.SaveChangesAsync();
             }
             catch (DbUpdateException)
             {
-                if (StudentExists(student.Id))
+                if (StudentExists(studentEntity.Id))
+                {
+                    return Conflict();
+                }
+                else if(StudentExists(studentEntity.Email))
+                {
+                    return Conflict();
+                }
+                else if (StudentExists(studentEntity.NIC))
                 {
                     return Conflict();
                 }
@@ -94,7 +148,7 @@ namespace StudentManager.Controllers
                 }
             }
 
-            return CreatedAtAction("GetStudent", new { id = student.Id }, student);
+            return CreatedAtAction("GetStudent", new { id = studentEntity.Id }, student);
         }
 
         // DELETE: api/Student/5
