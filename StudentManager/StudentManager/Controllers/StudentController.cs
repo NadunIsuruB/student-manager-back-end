@@ -10,6 +10,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StudentManager;
 using StudentManager.Models.Dtos;
+using StudentManager.Services;
+using StudentManager.Services.Interfaces;
 
 namespace StudentManager.Controllers
 {
@@ -18,134 +20,82 @@ namespace StudentManager.Controllers
     [ApiController]
     public class StudentController : ControllerBase
     {
-        private readonly ApplicationDbContext _context;
+        private readonly IStudentService _studentService;
 
-        public StudentController(ApplicationDbContext context)
+        public StudentController(IStudentService studentService)
         {
-            _context = context;
+            _studentService = studentService;
         }
 
         // GET: api/Student
-        [AllowAnonymous]
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Student>>> GetStudents(
+        public async Task<ActionResult<GetStudentsDto>> GetStudents(
             int page = 1, int pageSize = 10,
             string search = "", string sort = "asc", string sortBy = "FirstName"
             ) 
         {
-            // add pagination, sorting and searching to get
-            IQueryable<Student> students = _context.Students;
-
-            if (!string.IsNullOrEmpty(search))
+            try
             {
-                students = students.Where(s => 
-                        s.FirstName.Contains(search) || 
-                        s.LastName.Contains(search) ||
-                        s.Email.Contains(search) ||
-                        s.Address.Contains(search) ||
-                        s.Mobile.Contains(search) ||
-                        s.DateOfBirth.ToString().Contains(search) ||
-                        s.NIC.Contains(search));
+                var res = await _studentService.GetStudentsAsync(page, pageSize, search, sort, sortBy);
+                return Ok(res);
             }
-
-            if (!string.IsNullOrEmpty(sortBy))
+            catch (Exception e)
             {
-                students = sort.ToLower() == "asc" ? 
-                    students.OrderBy(Util.GetSortingPropertySelectorLambda(sortBy)) : 
-                    students.OrderByDescending(Util.GetSortingPropertySelectorLambda(sortBy));
+                Console.WriteLine(e);
+                throw;
             }
-                
-            var filteredStudents = await students
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToListAsync();
-            
-            return Ok(filteredStudents);
         }
 
         // GET: api/Student/5
         [HttpGet("{id}")]
         public async Task<ActionResult<Student>> GetStudent(string id)
         {
-            var student = await _context.Students.FindAsync(id);
-
-            if (student == null)
-            {
-                return NotFound();
-            }
-
-            return student;
-        }
-
-        // PUT: api/Student/5
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutStudent(string id, Student student)
-        {
-            if (id != student.Id)
-            {
-                return BadRequest();
-            }
-
-            _context.Entry(student).State = EntityState.Modified;
-
             try
             {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!StudentExists(id))
+                var student = await _studentService.GetStudentByIdAsync(id);
+
+                if (student == null)
                 {
                     return NotFound();
                 }
-                else
-                {
-                    throw;
-                }
-            }
 
-            return NoContent();
+                return Ok(student);   
+            } catch (Exception e)
+            {
+                Console.WriteLine(e);
+                throw;
+            }
+        }
+
+        // PUT: api/Student/5
+        [HttpPut("{id}")]
+        public async Task<IActionResult> PutStudent(string id, Student student)
+        {
+            try
+            {
+                var res =await _studentService.UpdateStudentAsync(id, student);
+                return Ok(res);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                throw;
+            }
         }
 
         // POST: api/Student
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
         public async Task<ActionResult<Student>> PostStudent(StudentDto student)
         {
-            Student studentEntity = new Student();
-            studentEntity.Id = Guid.NewGuid().ToString();
-            studentEntity.FirstName = student.FirstName;
-            studentEntity.LastName = student.LastName;
-            studentEntity.Mobile = student.Mobile;
-            studentEntity.Email = student.Email;
-            studentEntity.NIC = student.NIC;
-            studentEntity.DateOfBirth = student.DateOfBirth;
-            studentEntity.Address = student.Address;
-            
-            _context.Students.Add(studentEntity);
+            Student studentEntity;
             try
             {
-                await _context.SaveChangesAsync();
+                studentEntity = await _studentService.CreateStudentAsync(student);
             }
             catch (DbUpdateException)
             {
-                if (StudentExists(studentEntity.Id))
-                {
-                    return Conflict();
-                }
-                else if(StudentExists(studentEntity.Email))
-                {
-                    return Conflict();
-                }
-                else if (StudentExists(studentEntity.NIC))
-                {
-                    return Conflict();
-                }
-                else
-                {
-                    throw;
-                }
+                Console.WriteLine("Error creating student");
+                throw;
             }
 
             return CreatedAtAction("GetStudent", new { id = studentEntity.Id }, student);
@@ -155,21 +105,17 @@ namespace StudentManager.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteStudent(string id)
         {
-            var student = await _context.Students.FindAsync(id);
-            if (student == null)
+            try
             {
-                return NotFound();
+                await _studentService.DeleteStudentAsync(id);
             }
-
-            _context.Students.Remove(student);
-            await _context.SaveChangesAsync();
-
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                throw;
+            }
+            
             return NoContent();
-        }
-
-        private bool StudentExists(string id)
-        {
-            return _context.Students.Any(e => e.Id == id);
         }
     }
 }

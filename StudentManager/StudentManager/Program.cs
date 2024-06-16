@@ -4,10 +4,20 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using StudentManager;
+using StudentManager.Services;
+using StudentManager.Services.Interfaces;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+builder.Services.AddDbContext<ApplicationDbContext>(options => {
+    options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString));
+});
+
+
+// Add services to the DI container.
+builder.Services.AddScoped<IStudentService, StudentService>();
+builder.Services.AddScoped<IUserService, UserService>();
 
 //Jwt configuration starts here
 var jwtIssuer = builder.Configuration.GetSection("Jwt:Issuer").Get<string>();
@@ -28,11 +38,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 //Jwt configuration ends here
-
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContext<ApplicationDbContext>(options => {
-    options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString));
-});
 
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -66,6 +71,20 @@ builder.Services.AddSwaggerGen(opt =>
     });
 });
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(name: "AllowOrigin",
+        builder =>
+        {
+            builder
+                .WithOrigins("http://localhost:4200")
+                .AllowAnyOrigin()
+                .AllowAnyHeader();
+        });
+});
+
+// Add services to the container.
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -75,7 +94,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+//app.UseHttpsRedirection();
+app.UseCors("AllowOrigin");
 
 app.UseAuthentication();
 app.UseAuthorization();
