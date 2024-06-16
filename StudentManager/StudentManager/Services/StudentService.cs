@@ -19,7 +19,9 @@ public class StudentService: IStudentService
     {
         // add pagination, sorting and searching to get
         IQueryable<Student> students = _context.Students;
-            
+
+        students = students.Where(s => !s.IsDeleted);
+        
         if (!string.IsNullOrEmpty(search))
         {
             students = students.Where(s => 
@@ -86,7 +88,8 @@ public class StudentService: IStudentService
         }
 
         _context.Entry(student).State = EntityState.Modified;
-
+        student.Update();
+        
         await _context.SaveChangesAsync();
         return student;
     }
