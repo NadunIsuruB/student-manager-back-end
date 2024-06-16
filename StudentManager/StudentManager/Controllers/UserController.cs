@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using StudentManager.Models.Dtos;
+using StudentManager.Services.Interfaces;
 
 namespace StudentManager.Controllers
 {
@@ -13,38 +14,49 @@ namespace StudentManager.Controllers
     [ApiController]
     public class UserController : ControllerBase
     {
-        private readonly ApplicationDbContext _context;
-        private readonly IConfiguration _config;
+        private readonly IUserService _userService;
 
-        public UserController(ApplicationDbContext context, IConfiguration config)
+        public UserController(IUserService userService)
         {
-            _context = context;
-            _config = config;
+            _userService = userService;
         }
 
         // GET: api/User
         [HttpGet]
         public async Task<ActionResult<IEnumerable<UserDto>>> GetUsers()
         {
-            return await _context.Users.Select(u => new UserDto
+            try
             {
-                Name = u.Name,
-                Email = u.Email
-            }).ToListAsync();
+                var res = await _userService.GetUsers();
+                return Ok(res);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                throw;
+            }
         }
 
         // GET: api/User/5
         [HttpGet("{id}")]
         public async Task<ActionResult<User>> GetUser(string id)
         {
-            var user = await _context.Users.FindAsync(id);
-
-            if (user == null)
+            try
             {
-                return NotFound();
-            }
+                var user = await _userService.GetUser(id);
 
-            return user;
+                if (user == null)
+                {
+                    return NotFound();
+                }
+
+                return user;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                throw;
+            }
         }
 
         // PUT: api/User/5
@@ -55,12 +67,10 @@ namespace StudentManager.Controllers
             {
                 return BadRequest();
             }
-
-            _context.Entry(user).State = EntityState.Modified;
-
+            
             try
             {
-                await _context.SaveChangesAsync();
+                await _userService.UpdateUser(id, user);
             }
             catch (DbUpdateConcurrencyException)
             {
@@ -82,25 +92,16 @@ namespace StudentManager.Controllers
         [HttpPost("Login")]
         public async Task<ActionResult<User>> Login(UserLogin user)
         {
-            var password = Util.HashPassword(user.Password);
-            var userDb = await _context.Users.FirstOrDefaultAsync(u => u.Email == user.Email && u.Password == password);
-            if (userDb == null)
-            {
-                return NotFound();
+            try
+            {   
+                var token = await _userService.LoginUser(user);
+                return Ok(token);
             }
-            // Generate JWT token
-            var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]));
-            var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
-
-            var Sectoken = new JwtSecurityToken(_config["Jwt:Issuer"],
-                _config["Jwt:Issuer"],
-                null,
-                expires: DateTime.Now.AddMinutes(120),
-                signingCredentials: credentials);
-
-            var token =  new JwtSecurityTokenHandler().WriteToken(Sectoken);
-
-            return Ok("Bearer " + token);
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                throw;
+            }
         }
 
         // POST: api/User
@@ -108,60 +109,29 @@ namespace StudentManager.Controllers
         [HttpPost]
         public async Task<ActionResult<CreateUserResponseDto>> PostUser(CreateUserDto user)
         {
-            // Hash password
-            var userEntity = new User();
-            userEntity.Name = user.Name;
-            userEntity.Email = user.Email;
-            userEntity.Password = Util.HashPassword(user.Password);
-            
-            _context.Users.Add(userEntity);
             try
             {
-                await _context.SaveChangesAsync();
+                var createUserResponseDto = await _userService.CreateUser(user);
+                return Ok(createUserResponseDto);
             }
             catch (DbUpdateException)
             {
-                if (UserExists(userEntity.Id))
-                {
-                    return Conflict("Something went wrong, try again!");
-                }
-                else if (UserExists(userEntity.Email))
-                {
-                    return Conflict("User exits with Email");
-                }
-                {
-                    throw;
-                }
+                Console.WriteLine("User already exists");
+                return Conflict();
             }
-
-            return CreatedAtAction("GetUser", new { id = userEntity.Id }, new CreateUserResponseDto()
-            {
-                Id = userEntity.Id,
-                Email = userEntity.Email,
-                Name = userEntity.Name,
-                Password = user.Password
-            });
         }
 
         // DELETE: api/User/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteUser(string id)
         {
-            var user = await _context.Users.FindAsync(id);
-            if (user == null)
-            {
-                return NotFound();
-            }
-
-            _context.Users.Remove(user);
-            await _context.SaveChangesAsync();
-
+            _userService.DeleteUser(id);
             return NoContent();
         }
 
         private bool UserExists(string id)
         {
-            return _context.Users.Any(e => e.Id == id);
+            return _userService.UserExists(id);
         }
     }
 }
